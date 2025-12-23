@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IT Факультет: Группа 251</title>
+    <title>Группа бРПО-251</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- МОДАЛЬНОЕ ОКНО ВХОДА -->
+
     <div id="authModal" class="modal">
         <div class="modal-content">
             <div class="auth-header">
@@ -46,14 +46,11 @@
         </div>
     </div>
 
-    <!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ -->
+
     <div id="mainContent" class="app-wrapper" style="display:none;">
         
-        <!-- ЛЕВОЕ МЕНЮ (САЙДБАР) -->
+
         <aside class="sidebar-left">
-            <div class="sidebar-header">
-                <div class="app-logo">Byway</div>
-            </div>
             
             <div class="file-tree">
                 <div class="nav-section-title">МЕНЮ</div>
@@ -75,7 +72,7 @@
                 <div class="nav-section-title" style="margin-top: 20px;">СООБЩЕСТВО</div>
                 <div class="tree-children show-always">
                     <button class="nav-item" data-tab="contacts">
-                        <span class="file-icon">👥</span> Участники
+                        <span class="file-icon">👥</span> Список группы
                     </button>
                     <button class="nav-item" data-tab="chat">
                         <span class="file-icon">💬</span> Чат группы
@@ -96,10 +93,10 @@
             </div>
         </aside>
 
-        <!-- ПРАВАЯ ЧАСТЬ -->
+   
         <div class="main-layout">
             
-            <!-- ВЕРХНЯЯ ПАНЕЛЬ -->
+
             <nav class="navbar">
                 <div class="nav-left">
                     <h3 id="pageTitle">Панель управления</h3>
@@ -108,7 +105,7 @@
                     <div class="user-profile">
                         <div class="user-info-text">
                             <span class="u-name" id="userNameDisplay">Студент</span>
-                            <span class="u-role">Группа 251</span>
+                            <span class="u-role">Группа бРПО-251</span>
                         </div>
                         <div class="avatar-circle" id="userAvatar">👤</div>
                     </div>
@@ -116,14 +113,14 @@
             </nav>
 
             <div class="container">
-                <!-- ОБЛОЖКА (Без кнопки изменения) -->
+
                 <section class="hero-section" id="heroSection">
                     <div class="hero-content">
                         <div class="project-info">
                             <h1>Портал Группы 251</h1>
                             <p class="project-desc">Единое пространство для учебы, общения и планирования.</p>
                             <div class="project-stats">
-                                <span class="stat-badge">Студентов: 25</span>
+                                <span class="stat-badge">Студентов: 26</span>
                                 <span class="stat-badge warning" id="weekBadge">Загрузка...</span>
                             </div>
                         </div>
@@ -136,13 +133,13 @@
                     
                 </section>
 
-                <!-- СЕТКА КОНТЕНТА -->
+                
                 <div class="dashboard-grid">
                     
-                    <!-- ЦЕНТРАЛЬНАЯ ПАНЕЛЬ -->
+            
                     <main class="center-panel">
                         
-                        <!-- 1. РАСПИСАНИЕ -->
+                        
                         <section id="schedule" class="tab-content active">
                             <div class="panel-header">
                                 <h3>Расписание на неделю</h3>
@@ -150,7 +147,7 @@
                             <div class="content-body" id="scheduleContainer"></div>
                         </section>
 
-                        <!-- 2. ДОМАШКА -->
+                        
                         <section id="homework" class="tab-content">
                             <div class="panel-header"><h3>Домашние задания</h3></div>
                             <div class="content-body">
@@ -164,13 +161,13 @@
                             </div>
                         </section>
 
-                        <!-- 3. УЧАСТНИКИ -->
+                        
                         <section id="contacts" class="tab-content">
                             <div class="panel-header"><h3>Список группы</h3></div>
                             <div class="content-body grid-view" id="contactsList"></div>
                         </section>
 
-                        <!-- 4. НОВОСТИ -->
+                        
                         <section id="news" class="tab-content">
                             <div class="panel-header"><h3>Объявления</h3></div>
                             <div class="content-body">
@@ -183,7 +180,7 @@
                             </div>
                         </section>
 
-                        <!-- 5. СОБЫТИЯ -->
+                        
                         <section id="events" class="tab-content">
                             <div class="panel-header"><h3>События</h3></div>
                             <div class="content-body">
@@ -199,7 +196,7 @@
                             </div>
                         </section>
 
-                        <!-- 6. ЗАДАЧИ (ORGANIZER) -->
+                      
                         <section id="organizer" class="tab-content">
                              <div class="panel-header"><h3>Мои задачи</h3></div>
                              <div class="content-body">
@@ -213,7 +210,7 @@
                              </div>
                         </section>
 
-                        <!-- 7. ЧАТ -->
+                    
                         <section id="chat" class="tab-content">
                             <div class="panel-header"><h3>Общий чат</h3></div>
                             <div class="content-body chat-layout">
@@ -225,7 +222,7 @@
                             </div>
                         </section>
 
-                        <!-- 8. ВОПРОСЫ -->
+                       
                         <section id="feedback" class="tab-content">
                              <div class="panel-header"><h3>Вопросы и предложения</h3></div>
                              <div class="content-body">
@@ -244,7 +241,7 @@
                         </section>
                     </main>
 
-                    <!-- ПРАВЫЙ САЙДБАР (Календарь и Кураторы) -->
+                 
                     <aside class="sidebar-right">
                         <div class="right-card">
                              <div class="calendar-widget">
@@ -265,17 +262,10 @@
                         <div class="right-card">
                             <div class="panel-header simple">Кураторы</div>
                             <div class="user-row">
-                                <img src="https://randomuser.me/api/portraits/women/44.jpg" class="avatar-small-img">
+                                <img src="photo/kurator.jpg" class="avatar-small-img">
                                 <div class="user-details">
-                                    <div class="name">Анна Петрова</div>
+                                    <div class="name">Юлия Стукальска</div>
                                     <div class="role">Куратор</div>
-                                </div>
-                            </div>
-                            <div class="user-row">
-                                <img src="https://randomuser.me/api/portraits/men/32.jpg" class="avatar-small-img">
-                                <div class="user-details">
-                                    <div class="name">Сергей Волков</div>
-                                    <div class="role">Админ</div>
                                 </div>
                             </div>
                         </div>

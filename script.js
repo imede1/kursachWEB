@@ -1,25 +1,26 @@
-// ==========================================
-// КОНФИГУРАЦИЯ
-// ==========================================
+
 const API_URL = 'https://kursachweb-backend.onrender.com'; 
 
 const scheduleStartDate = new Date('2025-09-01T00:00:00'); 
 
-// Расписание (оставляем статичным, т.к. оно редко меняется)
+
 const scheduleData = {
     numerator: {
-        'Понедельник': [ { t:'08:30', n:'Мат. Анализ (Лек)', r:'305' }, { t:'10:15', n:'Программирование', r:'201' } ],
-        'Вторник': [ { t:'08:30', n:'Английский яз.', r:'108' }, { t:'12:00', n:'Алгоритмы', r:'201' } ],
-        'Среда': [ { t:'08:30', n:'Веб-технологии', r:'205' }, { t:'12:00', n:'Физкультура', r:'Спортзал' } ],
-        'Четверг': [ { t:'08:30', n:'История', r:'115' } ],
-        'Пятница': [ { t:'08:30', n:'Проектирование ПО', r:'205' } ]
+        'Понедельник': [ { t:'08:30', n:'Web-технологии (практ)', r:'2303' }, { t:'10:15', n:'ОРГ (практ)', r:'5311' }, { t:'12:00', n:'Web-технологии (лек)', r:'6411' }, { t:'14:20', n:'Физ-ра', r:'2304' } ],
+        'Вторник': [ { t:'', n:'Нет занятий', r:'' }],
+        'Среда': [ { t:'10:15', n:'Физ-ра', r:'' }, { t:'12:00', n:'Иностранный язык (1пг)', r:'6034' }, { t:'12:00', n:'Web-технологии (практ) (2пг)', r:'2303' }, { t:'14:20', n:'История России', r:'5310' } ],
+        'Четверг': [ { t:'08:30', n:'Основы проектного управления', r:'2305' }, { t:'10:15', n:'Основы проектного управления', r:'2305' } ],
+        'Пятница': [ { t:'08:30', n:'Матиматический анализ', r:'2247' }, { t:'10:15', n:'Математический анализ', r:'2247' }, { t:'12:00', n:'Теория систем и системный анализ (1пг)', r:'2305' } ],
+        'Суббота': [ { t:'10:15', n:'Физ-ра', r:'' }, { t:'12:00', n:'История России (лек)', r:'6271' }, { t:'14:20', n:'Иностранный язык (2пг)', r:'6344' }, {t:'16:05', n:'Иностранный язык (2пг)', r:'6344'} ]
+        
     },
     denominator: {
-        'Понедельник': [ { t:'08:30', n:'Мат. Анализ (Прак)', r:'305' }, { t:'12:00', n:'Физика', r:'412' } ],
-        'Вторник': [ { t:'10:15', n:'Базы данных', r:'203' } ],
-        'Среда': [ { t:'10:15', n:'Математика', r:'305' } ],
-        'Четверг': [ { t:'10:15', n:'Комп. сети', r:'203' } ],
-        'Пятница': [ { t:'10:15', n:'Дискретная мат.', r:'305' } ]
+        'Понедельник': [ { t:'14:20', n:'Физ-ра (лек)', r:'2304' }, {t:'16:05', n:'ОРГ (лек)', r:'2304' } ],
+        'Вторник': [ { t:'08:30', n:'Русский язык (лек)', r:'3113' }, { t:'10:15', n:'Русский язык (практ)', r:'6332' }],
+        'Среда': [ { t:'08:30', n:'ОРГ (практ)', r:'5310' }, { t:'10:15', n:'Физ-ра', r:'' }, { t:'12:00', n:'Web-технологии (практ) (1пг)', r:'2303' }, { t:'12:00', n:'Иностранный язык (2пг)', r:'6350' } ],
+        'Четверг': [ { t:'08:30', n:'Основы проектного управления', r:'2305' }, { t:'10:15', n:'Основы проектного управления', r:'2305' } ],
+        'Пятница': [ { t:'10:15', n:'Теория систем и системный анализ (2пг)', r:'2303' }, { t:'12:00', n:'Теория систем и системный анализ (лек)', r:'2325' }, { t:'14:20', n:'Теория систем и системный анализ (практ)', r:'2245' } ],
+        'Суббота': [ { t:'08:30', n:'История России (лек)', r:'6271' }, { t:'10:15', n:'Физ-ра', r:'' }, { t:'12:00', n:'Иностранный язык (1пг)', r:'6344' }, {t:'14:20', n:'Иностранный язык (1пг)', r:'6344'} ]
     }
 };
 
@@ -30,13 +31,11 @@ let currMonth = currDate.getMonth();
 let currYear = currDate.getFullYear();
 let chatInterval = null;
 
-// ==========================================
-// ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
-// ==========================================
+
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     
-    // Проверка, если пользователь уже вошел
+
     const saved = localStorage.getItem('currentUser');
     if(saved) {
         try {
@@ -56,29 +55,25 @@ function initApp() {
     initTabs();
     initCalendar();
     
-    // --- ПОДКЛЮЧЕНИЕ МОДУЛЕЙ С БАЗОЙ ДАННЫХ ---
-    
-    // 1. Загрузка задач пользователя
+
     initTasks();
     
-    // 2. Запуск чата (с автообновлением)
+
     initChat();
     
-    // 3. Загрузка списка участников (С ИСПРАВЛЕНИЕМ)
+   
     initContacts();
 
-    // 4. Загрузка списков (Домашка, Новости и т.д.)
+  
     initGenericList('homework', '/api/homework', ['subject', 'task', 'deadline'], renderHomeworkItem);
     initGenericList('news', '/api/news', ['title', 'content'], renderNewsItem);
     initGenericList('events', '/api/events', ['title', 'event_date', 'location'], renderEventItem);
     initGenericList('feedback', '/api/feedback', ['category', 'subject', 'message'], renderFeedbackItem);
 }
 
-// ==========================================
-// АВТОРИЗАЦИЯ
-// ==========================================
+
 function initAuth() {
-    // Переключение Вход / Регистрация
+
     document.getElementById('authSwitchLink').addEventListener('click', (e) => {
         e.preventDefault();
         isLoginMode = !isLoginMode;
@@ -87,7 +82,7 @@ function initAuth() {
         document.getElementById('registerFields').style.display = isLoginMode ? 'none' : 'block';
     });
 
-    // Отправка формы
+
     document.getElementById('authForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('authUsername').value;
@@ -110,7 +105,7 @@ function initAuth() {
                     login(data);
                 } else {
                     alert('Регистрация успешна! Теперь войдите.');
-                    // Переключаем на вход
+
                     isLoginMode = true;
                     document.getElementById('authSubmit').textContent = 'Войти';
                     document.getElementById('registerFields').style.display = 'none';
@@ -125,12 +120,12 @@ function initAuth() {
         }
     });
 
-    // Гостевой вход
+
     document.getElementById('guestLoginBtn').addEventListener('click', () => {
         login({ id: 0, username: 'guest', fullName: 'Гость' });
     });
 
-    // Выход
+
     document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('currentUser');
         location.reload();
@@ -153,9 +148,7 @@ function showDashboard() {
     }
 }
 
-// ==========================================
-// УЧАСТНИКИ (ИЗ БАЗЫ ДАННЫХ)
-// ==========================================
+
 async function initContacts() {
     try {
         const res = await fetch(`${API_URL}/api/users`);
@@ -171,7 +164,6 @@ async function initContacts() {
 
         container.innerHTML = users.map(u => {
             const initial = u.fullName ? u.fullName[0].toUpperCase() : '?';
-            // Если это текущий пользователь
             let roleBadge = 'Студент';
             if (currentUser && u.username === currentUser.username) {
                 roleBadge = '<span style="color:var(--primary); font-weight:bold;">Это Вы</span>';
@@ -195,9 +187,6 @@ async function initContacts() {
     }
 }
 
-// ==========================================
-// ЗАДАЧИ
-// ==========================================
 async function initTasks() {
     loadTasks();
     const addBtn = document.getElementById('addTaskBtn');
@@ -250,9 +239,7 @@ window.deleteTask = async function(id) {
     loadTasks();
 };
 
-// ==========================================
-// ЧАТ
-// ==========================================
+
 function initChat() {
     const btn = document.getElementById('sendChatBtn');
     const newBtn = btn.cloneNode(true);
@@ -260,7 +247,7 @@ function initChat() {
 
     newBtn.addEventListener('click', sendMessage);
     
-    // Автообновление каждые 3 секунды
+
     loadChat();
     if(chatInterval) clearInterval(chatInterval);
     chatInterval = setInterval(loadChat, 3000);
@@ -286,7 +273,7 @@ async function loadChat() {
         const msgs = await res.json();
         const box = document.getElementById('chatMessages');
         
-        // Проверяем, был ли скролл внизу, чтобы автопрокручивать
+      
         const wasScrolled = box.scrollTop + box.clientHeight >= box.scrollHeight - 50;
 
         box.innerHTML = msgs.map(m => {
@@ -304,9 +291,7 @@ async function loadChat() {
     } catch(e) { console.error(e); }
 }
 
-// ==========================================
-// УНИВЕРСАЛЬНЫЕ СПИСКИ (HW, News, etc)
-// ==========================================
+
 function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
     const btnId = `add${key.charAt(0).toUpperCase() + key.slice(1)}Btn`;
     const listId = `${key}List`;
@@ -333,7 +318,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
         
         newBtn.addEventListener('click', async () => {
             const payload = {};
-            // Маппинг данных из полей
+          
             if(key === 'homework') {
                 payload.subject = document.getElementById('hwSubject').value;
                 payload.task = document.getElementById('hwTask').value;
@@ -351,7 +336,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
                 payload.message = document.getElementById('fbMessage').value;
             }
 
-            // Валидация
+          
             let valid = true;
             Object.values(payload).forEach(v => { if(!v) valid = false; });
             if(!valid) { alert('Заполните все поля!'); return; }
@@ -362,11 +347,11 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
                 body: JSON.stringify(payload)
             });
 
-            // Очистка полей
+    
             fieldIds.forEach(id => { 
                 const el = document.getElementById(id); 
                 if(el) el.value = '';
-                // Специфичный сброс для select
+              
                 if(el.tagName === 'SELECT') el.selectedIndex = 0;
             });
             loadItems();
@@ -375,7 +360,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
     loadItems();
 }
 
-// Шаблоны карточек
+
 function renderHomeworkItem(i) {
     const date = i.deadline ? new Date(i.deadline).toLocaleDateString() : '—';
     return `<div class="item-card"><span class="item-title">${i.subject}</span><div class="item-desc">${i.task}</div><div class="item-meta">Срок: ${date}</div></div>`;
@@ -391,9 +376,7 @@ function renderFeedbackItem(i) {
     return `<div class="item-card"><span class="item-title" style="color:var(--primary)">[${i.category}] ${i.subject}</span><div class="item-desc">${i.message}</div></div>`;
 }
 
-// ==========================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
-// ==========================================
+
 function renderSchedule() {
     const now = new Date();
     const start = new Date(scheduleStartDate).setHours(0,0,0,0);
@@ -454,7 +437,7 @@ function renderCalendar() {
 
 function updateClock() {
     const el = document.getElementById('clock');
-    if(el) { const now = new Date(); el.textContent = now.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit'}); }
+    if(el) { const now = new Date(); el.textContent = now.toLocaleTimeString('ru-RU', {hour: '2-digit', minute:'2-digit', second:'2-digit'}); }
 }
 
 function initTabs() {
