@@ -1,5 +1,7 @@
 
+
 const API_URL = 'https://kursachweb-backend.onrender.com'; 
+
 
 const scheduleStartDate = new Date('2025-09-01T00:00:00'); 
 
@@ -12,7 +14,6 @@ const scheduleData = {
         'Четверг': [ { t:'08:30', n:'Основы проектного управления', r:'2305' }, { t:'10:15', n:'Основы проектного управления', r:'2305' } ],
         'Пятница': [ { t:'08:30', n:'Матиматический анализ', r:'2247' }, { t:'10:15', n:'Математический анализ', r:'2247' }, { t:'12:00', n:'Теория систем и системный анализ (1пг)', r:'2305' } ],
         'Суббота': [ { t:'10:15', n:'Физ-ра', r:'' }, { t:'12:00', n:'История России (лек)', r:'6271' }, { t:'14:20', n:'Иностранный язык (2пг)', r:'6344' }, {t:'16:05', n:'Иностранный язык (2пг)', r:'6344'} ]
-        
     },
     denominator: {
         'Понедельник': [ { t:'14:20', n:'Физ-ра (лек)', r:'2304' }, {t:'16:05', n:'ОРГ (лек)', r:'2304' } ],
@@ -29,13 +30,14 @@ let isLoginMode = true;
 let currDate = new Date();
 let currMonth = currDate.getMonth();
 let currYear = currDate.getFullYear();
-let chatInterval = null;
 
+
+const updateCallbacks = []; 
+let globalInterval = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     
-
     const saved = localStorage.getItem('currentUser');
     if(saved) {
         try {
@@ -50,30 +52,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initApp() {
     updateClock();
-    setInterval(updateClock, 1000);
+    setInterval(updateClock, 1000); 
+
     renderSchedule();
     initTabs();
     initCalendar();
-    
-
-    initTasks();
-    
-
-    initChat();
-    
-   
-    initContacts();
 
   
+    initTasks();
+    initChat();
+    initContacts();
+
+
     initGenericList('homework', '/api/homework', ['subject', 'task', 'deadline'], renderHomeworkItem);
     initGenericList('news', '/api/news', ['title', 'content'], renderNewsItem);
     initGenericList('events', '/api/events', ['title', 'event_date', 'location'], renderEventItem);
     initGenericList('feedback', '/api/feedback', ['category', 'subject', 'message'], renderFeedbackItem);
+
+
+    if (globalInterval) clearInterval(globalInterval);
+    
+   
+    const runUpdates = () => {
+        if (!currentUser) return; 
+        updateCallbacks.forEach(callback => callback());
+    };
+
+   
+    runUpdates();
+
+ 
+    globalInterval = setInterval(runUpdates, 3000);
 }
 
 
 function initAuth() {
-
     document.getElementById('authSwitchLink').addEventListener('click', (e) => {
         e.preventDefault();
         isLoginMode = !isLoginMode;
@@ -81,7 +94,6 @@ function initAuth() {
         document.getElementById('authSwitchText').textContent = isLoginMode ? 'Нет аккаунта?' : 'Уже есть аккаунт?';
         document.getElementById('registerFields').style.display = isLoginMode ? 'none' : 'block';
     });
-
 
     document.getElementById('authForm').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -105,7 +117,6 @@ function initAuth() {
                     login(data);
                 } else {
                     alert('Регистрация успешна! Теперь войдите.');
-
                     isLoginMode = true;
                     document.getElementById('authSubmit').textContent = 'Войти';
                     document.getElementById('registerFields').style.display = 'none';
@@ -120,11 +131,9 @@ function initAuth() {
         }
     });
 
-
     document.getElementById('guestLoginBtn').addEventListener('click', () => {
         login({ id: 0, username: 'guest', fullName: 'Гость' });
     });
-
 
     document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('currentUser');
@@ -149,63 +158,75 @@ function showDashboard() {
 }
 
 
-async function initContacts() {
-    try {
-        const res = await fetch(`${API_URL}/api/users`);
-        const users = await res.json();
-        
-        const container = document.getElementById('contactsList');
-        if(!container) return;
+function initContacts() {
+   
+    const loadContacts = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/users`);
+            const users = await res.json();
+            
+            const container = document.getElementById('contactsList');
+            if(!container) return;
 
-        if (!users || users.length === 0) {
-            container.innerHTML = '<div style="padding:20px; color:#aaa; grid-column:1/-1; text-align:center;">Пока нет участников</div>';
-            return;
-        }
 
-        container.innerHTML = users.map(u => {
-            const initial = u.fullName ? u.fullName[0].toUpperCase() : '?';
-            let roleBadge = 'Студент';
-            if (currentUser && u.username === currentUser.username) {
-                roleBadge = '<span style="color:var(--primary); font-weight:bold;">Это Вы</span>';
+            
+            if (!users || users.length === 0) {
+                container.innerHTML = '<div style="padding:20px; color:#aaa; grid-column:1/-1; text-align:center;">Пока нет участников</div>';
+                return;
             }
 
-            return `
-            <div class="contact-card">
-                <div class="avatar-circle" style="width:60px; height:60px; font-size:1.5rem; margin-bottom:10px;">
-                    ${initial}
+            container.innerHTML = users.map(u => {
+                const initial = u.fullName ? u.fullName[0].toUpperCase() : '?';
+                let roleBadge = 'Студент';
+                if (currentUser && u.username === currentUser.username) {
+                    roleBadge = '<span style="color:var(--primary); font-weight:bold;">Это Вы</span>';
+                }
+
+                return `
+                <div class="contact-card">
+                    <div class="avatar-circle" style="width:60px; height:60px; font-size:1.5rem; margin-bottom:10px;">
+                        ${initial}
+                    </div>
+                    <div class="name" style="font-weight:700; margin-bottom:4px;">${u.fullName}</div>
+                    <div class="role" style="font-size:0.8rem; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:4px;">
+                        ${roleBadge}
+                    </div>
                 </div>
-                <div class="name" style="font-weight:700; margin-bottom:4px;">${u.fullName}</div>
-                <div class="role" style="font-size:0.8rem; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:4px;">
-                    ${roleBadge}
-                </div>
-            </div>
-            `;
-        }).join('');
-        
-    } catch (err) {
-        console.error('Ошибка загрузки участников:', err);
-    }
+                `;
+            }).join('');
+            
+        } catch (err) {
+            console.error('Ошибка загрузки участников:', err);
+        }
+    };
+
+  
+    updateCallbacks.push(loadContacts);
 }
 
-async function initTasks() {
-    loadTasks();
+function initTasks() {
     const addBtn = document.getElementById('addTaskBtn');
-    const newBtn = addBtn.cloneNode(true);
-    addBtn.parentNode.replaceChild(newBtn, addBtn);
+    if (addBtn) {
+        const newBtn = addBtn.cloneNode(true);
+        addBtn.parentNode.replaceChild(newBtn, addBtn);
 
-    newBtn.addEventListener('click', async () => {
-        const input = document.getElementById('newTaskInput');
-        const text = input.value.trim();
-        if(!text) return;
-        
-        await fetch(`${API_URL}/api/tasks`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ userId: currentUser.id, text })
+        newBtn.addEventListener('click', async () => {
+            const input = document.getElementById('newTaskInput');
+            const text = input.value.trim();
+            if(!text) return;
+            
+            await fetch(`${API_URL}/api/tasks`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ userId: currentUser.id, text })
+            });
+            input.value = '';
+            loadTasks(); 
         });
-        input.value = '';
-        loadTasks();
-    });
+    }
+
+   
+    updateCallbacks.push(loadTasks);
 }
 
 async function loadTasks() {
@@ -214,11 +235,14 @@ async function loadTasks() {
         const res = await fetch(`${API_URL}/api/tasks?userId=${currentUser.id}`);
         const tasks = await res.json();
         const container = document.getElementById('tasksList');
+        if (!container) return;
         
         if(tasks.length === 0) {
             container.innerHTML = '<div style="color:#aaa; text-align:center; padding:10px;">Нет задач</div>';
             return;
         }
+        
+
         container.innerHTML = tasks.map((t) => `
             <div class="task-row ${t.is_done ? 'done' : ''}">
                 <div class="check-circle" onclick="toggleTask(${t.id})">✓</div>
@@ -242,15 +266,14 @@ window.deleteTask = async function(id) {
 
 function initChat() {
     const btn = document.getElementById('sendChatBtn');
-    const newBtn = btn.cloneNode(true);
-    btn.parentNode.replaceChild(newBtn, btn);
-
-    newBtn.addEventListener('click', sendMessage);
+    if (btn) {
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        newBtn.addEventListener('click', sendMessage);
+    }
     
 
-    loadChat();
-    if(chatInterval) clearInterval(chatInterval);
-    chatInterval = setInterval(loadChat, 3000);
+    updateCallbacks.push(loadChat);
 }
 
 async function sendMessage() {
@@ -272,11 +295,13 @@ async function loadChat() {
         const res = await fetch(`${API_URL}/api/chat`);
         const msgs = await res.json();
         const box = document.getElementById('chatMessages');
+        if(!box) return;
         
-      
+    
         const wasScrolled = box.scrollTop + box.clientHeight >= box.scrollHeight - 50;
 
-        box.innerHTML = msgs.map(m => {
+      
+        const html = msgs.map(m => {
             const date = new Date(m.created_at);
             const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             const isMe = m.username === currentUser.fullName;
@@ -287,7 +312,12 @@ async function loadChat() {
             </div>
         `}).join('');
 
-        if(wasScrolled) box.scrollTop = box.scrollHeight;
+      
+        if (box.innerHTML !== html) {
+             box.innerHTML = html;
+             if(wasScrolled) box.scrollTop = box.scrollHeight;
+        }
+
     } catch(e) { console.error(e); }
 }
 
@@ -296,6 +326,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
     const btnId = `add${key.charAt(0).toUpperCase() + key.slice(1)}Btn`;
     const listId = `${key}List`;
     
+
     const loadItems = async () => {
         try {
             const res = await fetch(`${API_URL}${apiEndpoint}`);
@@ -306,10 +337,18 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
             if(data.length === 0) {
                 container.innerHTML = '<div style="color:#aaa; text-align:center; padding:20px;">Нет записей</div>';
             } else {
-                container.innerHTML = data.map(item => renderFunc(item)).join('');
+      
+                const newHtml = data.map(item => renderFunc(item)).join('');
+
+                if (container.innerHTML !== newHtml) {
+                    container.innerHTML = newHtml;
+                }
             }
         } catch(e) { console.error(e); }
     };
+
+
+    updateCallbacks.push(loadItems);
 
     const btn = document.getElementById(btnId);
     if(btn) {
@@ -318,7 +357,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
         
         newBtn.addEventListener('click', async () => {
             const payload = {};
-          
+  
             if(key === 'homework') {
                 payload.subject = document.getElementById('hwSubject').value;
                 payload.task = document.getElementById('hwTask').value;
@@ -336,7 +375,7 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
                 payload.message = document.getElementById('fbMessage').value;
             }
 
-          
+        
             let valid = true;
             Object.values(payload).forEach(v => { if(!v) valid = false; });
             if(!valid) { alert('Заполните все поля!'); return; }
@@ -347,17 +386,17 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
                 body: JSON.stringify(payload)
             });
 
-    
+        
             fieldIds.forEach(id => { 
                 const el = document.getElementById(id); 
                 if(el) el.value = '';
-              
                 if(el.tagName === 'SELECT') el.selectedIndex = 0;
             });
+            
+           
             loadItems();
         });
     }
-    loadItems();
 }
 
 
