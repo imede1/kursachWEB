@@ -1,12 +1,12 @@
 // ==========================================
 // КОНФИГУРАЦИЯ
 // ==========================================
-
-const API_URL = 'https://kursachweb-backend.onrender.com'; 
+// ⬇️ ВСТАВЬ СЮДА СВОЮ ССЫЛКУ С RENDER (без слеша в конце) ⬇️
+const API_URL = 'https://tvoy-backend-app.onrender.com'; 
 
 const scheduleStartDate = new Date('2025-09-01T00:00:00'); 
 
-// Данные расписания (остаются на клиенте, так как они статичные)
+// Расписание (оставляем статичным, т.к. оно редко меняется)
 const scheduleData = {
     numerator: {
         'Понедельник': [ { t:'08:30', n:'Мат. Анализ (Лек)', r:'305' }, { t:'10:15', n:'Программирование', r:'201' } ],
@@ -32,17 +32,21 @@ let currYear = currDate.getFullYear();
 let chatInterval = null;
 
 // ==========================================
-// ИНИЦИАЛИЗАЦИЯ
+// ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ
 // ==========================================
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     
-    // Проверка сохраненной сессии
+    // Проверка, если пользователь уже вошел
     const saved = localStorage.getItem('currentUser');
     if(saved) {
-        currentUser = JSON.parse(saved);
-        showDashboard();
-        initApp();
+        try {
+            currentUser = JSON.parse(saved);
+            showDashboard();
+            initApp();
+        } catch(e) {
+            localStorage.removeItem('currentUser');
+        }
     }
 });
 
@@ -53,11 +57,18 @@ function initApp() {
     initTabs();
     initCalendar();
     
-    // Инициализация функций с БД
+    // --- ПОДКЛЮЧЕНИЕ МОДУЛЕЙ С БАЗОЙ ДАННЫХ ---
+    
+    // 1. Загрузка задач пользователя
     initTasks();
+    
+    // 2. Запуск чата (с автообновлением)
     initChat();
     
-    // Загрузка списков с сервера
+    // 3. Загрузка списка участников (С ИСПРАВЛЕНИЕМ)
+    initContacts();
+
+    // 4. Загрузка списков (Домашка, Новости и т.д.)
     initGenericList('homework', '/api/homework', ['subject', 'task', 'deadline'], renderHomeworkItem);
     initGenericList('news', '/api/news', ['title', 'content'], renderNewsItem);
     initGenericList('events', '/api/events', ['title', 'event_date', 'location'], renderEventItem);
@@ -68,6 +79,7 @@ function initApp() {
 // АВТОРИЗАЦИЯ
 // ==========================================
 function initAuth() {
+    // Переключение Вход / Регистрация
     document.getElementById('authSwitchLink').addEventListener('click', (e) => {
         e.preventDefault();
         isLoginMode = !isLoginMode;
@@ -76,6 +88,7 @@ function initAuth() {
         document.getElementById('registerFields').style.display = isLoginMode ? 'none' : 'block';
     });
 
+    // Отправка формы
     document.getElementById('authForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const username = document.getElementById('authUsername').value;
@@ -94,25 +107,31 @@ function initAuth() {
             const data = await res.json();
 
             if (res.ok) {
-                if (isLoginMode) login(data);
-                else {
-                    alert('Регистрация успешна! Войдите.');
-                    location.reload();
+                if (isLoginMode) {
+                    login(data);
+                } else {
+                    alert('Регистрация успешна! Теперь войдите.');
+                    // Переключаем на вход
+                    isLoginMode = true;
+                    document.getElementById('authSubmit').textContent = 'Войти';
+                    document.getElementById('registerFields').style.display = 'none';
+                    document.getElementById('authSwitchText').textContent = 'Нет аккаунта?';
                 }
             } else {
-                alert(data.message || 'Ошибка');
+                alert(data.message || 'Ошибка выполнения запроса');
             }
         } catch (err) {
             console.error(err);
-            alert('Ошибка сервера. Проверьте подключение.');
+            alert('Ошибка подключения к серверу. Проверьте API_URL.');
         }
     });
 
+    // Гостевой вход
     document.getElementById('guestLoginBtn').addEventListener('click', () => {
-        // Для гостя используем ID 0, но задачи сохраняться не будут в общей базе корректно
         login({ id: 0, username: 'guest', fullName: 'Гость' });
     });
 
+    // Выход
     document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('currentUser');
         location.reload();
@@ -136,13 +155,53 @@ function showDashboard() {
 }
 
 // ==========================================
-// ЗАДАЧИ (БД)
+// УЧАСТНИКИ (ИЗ БАЗЫ ДАННЫХ)
+// ==========================================
+async function initContacts() {
+    try {
+        const res = await fetch(`${API_URL}/api/users`);
+        const users = await res.json();
+        
+        const container = document.getElementById('contactsList');
+        if(!container) return;
+
+        if (!users || users.length === 0) {
+            container.innerHTML = '<div style="padding:20px; color:#aaa; grid-column:1/-1; text-align:center;">Пока нет участников</div>';
+            return;
+        }
+
+        container.innerHTML = users.map(u => {
+            const initial = u.fullName ? u.fullName[0].toUpperCase() : '?';
+            // Если это текущий пользователь
+            let roleBadge = 'Студент';
+            if (currentUser && u.username === currentUser.username) {
+                roleBadge = '<span style="color:var(--primary); font-weight:bold;">Это Вы</span>';
+            }
+
+            return `
+            <div class="contact-card">
+                <div class="avatar-circle" style="width:60px; height:60px; font-size:1.5rem; margin-bottom:10px;">
+                    ${initial}
+                </div>
+                <div class="name" style="font-weight:700; margin-bottom:4px;">${u.fullName}</div>
+                <div class="role" style="font-size:0.8rem; color:#64748b; background:#f1f5f9; padding:2px 8px; border-radius:4px;">
+                    ${roleBadge}
+                </div>
+            </div>
+            `;
+        }).join('');
+        
+    } catch (err) {
+        console.error('Ошибка загрузки участников:', err);
+    }
+}
+
+// ==========================================
+// ЗАДАЧИ
 // ==========================================
 async function initTasks() {
-    loadTasks(); // Загрузить при старте
-
+    loadTasks();
     const addBtn = document.getElementById('addTaskBtn');
-    // Удаляем старые слушатели через клон
     const newBtn = addBtn.cloneNode(true);
     addBtn.parentNode.replaceChild(newBtn, addBtn);
 
@@ -150,14 +209,12 @@ async function initTasks() {
         const input = document.getElementById('newTaskInput');
         const text = input.value.trim();
         if(!text) return;
-
-        // Отправка на сервер
+        
         await fetch(`${API_URL}/api/tasks`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ userId: currentUser.id, text })
         });
-        
         input.value = '';
         loadTasks();
     });
@@ -165,22 +222,23 @@ async function initTasks() {
 
 async function loadTasks() {
     if(!currentUser || !currentUser.id) return;
-    const res = await fetch(`${API_URL}/api/tasks?userId=${currentUser.id}`);
-    const tasks = await res.json();
-    
-    const container = document.getElementById('tasksList');
-    if(tasks.length === 0) {
-        container.innerHTML = '<div style="color:#aaa; text-align:center; padding:10px;">Нет задач</div>';
-        return;
-    }
-    
-    container.innerHTML = tasks.map((t) => `
-        <div class="task-row ${t.is_done ? 'done' : ''}">
-            <div class="check-circle" onclick="toggleTask(${t.id})">✓</div>
-            <span class="task-text">${t.text}</span>
-            <div class="delete-task" onclick="deleteTask(${t.id})">✕</div>
-        </div>
-    `).join('');
+    try {
+        const res = await fetch(`${API_URL}/api/tasks?userId=${currentUser.id}`);
+        const tasks = await res.json();
+        const container = document.getElementById('tasksList');
+        
+        if(tasks.length === 0) {
+            container.innerHTML = '<div style="color:#aaa; text-align:center; padding:10px;">Нет задач</div>';
+            return;
+        }
+        container.innerHTML = tasks.map((t) => `
+            <div class="task-row ${t.is_done ? 'done' : ''}">
+                <div class="check-circle" onclick="toggleTask(${t.id})">✓</div>
+                <span class="task-text">${t.text}</span>
+                <div class="delete-task" onclick="deleteTask(${t.id})">✕</div>
+            </div>
+        `).join('');
+    } catch(e) { console.error(e); }
 }
 
 window.toggleTask = async function(id) {
@@ -194,7 +252,7 @@ window.deleteTask = async function(id) {
 };
 
 // ==========================================
-// ЧАТ (БД)
+// ЧАТ
 // ==========================================
 function initChat() {
     const btn = document.getElementById('sendChatBtn');
@@ -203,7 +261,7 @@ function initChat() {
 
     newBtn.addEventListener('click', sendMessage);
     
-    // Загружать сообщения каждые 3 секунды
+    // Автообновление каждые 3 секунды
     loadChat();
     if(chatInterval) clearInterval(chatInterval);
     chatInterval = setInterval(loadChat, 3000);
@@ -219,40 +277,41 @@ async function sendMessage() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ username: currentUser.fullName, message })
     });
-
     input.value = '';
     loadChat();
 }
 
 async function loadChat() {
-    const res = await fetch(`${API_URL}/api/chat`);
-    const msgs = await res.json();
-    
-    const box = document.getElementById('chatMessages');
-    const wasScrolled = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+    try {
+        const res = await fetch(`${API_URL}/api/chat`);
+        const msgs = await res.json();
+        const box = document.getElementById('chatMessages');
+        
+        // Проверяем, был ли скролл внизу, чтобы автопрокручивать
+        const wasScrolled = box.scrollTop + box.clientHeight >= box.scrollHeight - 50;
 
-    box.innerHTML = msgs.map(m => {
-        // Форматирование времени из TIMESTAMP
-        const date = new Date(m.created_at);
-        const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-        return `
-        <div class="chat-bubble ${m.username === currentUser.fullName ? 'me' : ''}">
-            <div class="chat-meta"><b>${m.username}</b> ${timeStr}</div>
-            <div class="chat-text">${m.message}</div>
-        </div>
-    `}).join('');
+        box.innerHTML = msgs.map(m => {
+            const date = new Date(m.created_at);
+            const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            const isMe = m.username === currentUser.fullName;
+            return `
+            <div class="chat-bubble ${isMe ? 'me' : ''}">
+                <div class="chat-meta"><b>${m.username}</b> ${timeStr}</div>
+                <div class="chat-text">${m.message}</div>
+            </div>
+        `}).join('');
 
-    if(wasScrolled) box.scrollTop = box.scrollHeight;
+        if(wasScrolled) box.scrollTop = box.scrollHeight;
+    } catch(e) { console.error(e); }
 }
 
 // ==========================================
-// УНИВЕРСАЛЬНЫЙ ЗАГРУЗЧИК (Домашка, Новости...)
+// УНИВЕРСАЛЬНЫЕ СПИСКИ (HW, News, etc)
 // ==========================================
 function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
-    const btnId = `add${key.charAt(0).toUpperCase() + key.slice(1)}Btn`; // например addHomeworkBtn
+    const btnId = `add${key.charAt(0).toUpperCase() + key.slice(1)}Btn`;
     const listId = `${key}List`;
     
-    // Функция загрузки
     const loadItems = async () => {
         try {
             const res = await fetch(`${API_URL}${apiEndpoint}`);
@@ -268,22 +327,14 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
         } catch(e) { console.error(e); }
     };
 
-    // Функция добавления
     const btn = document.getElementById(btnId);
     if(btn) {
         const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn); // очистка старых событий
+        btn.parentNode.replaceChild(newBtn, btn);
         
         newBtn.addEventListener('click', async () => {
             const payload = {};
-            let valid = true;
-            
-            // Собираем данные из полей ввода (HTML ID должны совпадать с названиями полей в объекте payload, но тут мы мапим)
-            // fieldIds - это ID инпутов в HTML: ['hwSubject', 'hwTask']
-            // А на сервер нужно слать JSON ключи, соответствующие БД. 
-            // Для упрощения, в server.js поля совпадают или мы их сопоставим тут вручную.
-            
-            // Маппинг для конкретных форм:
+            // Маппинг данных из полей
             if(key === 'homework') {
                 payload.subject = document.getElementById('hwSubject').value;
                 payload.task = document.getElementById('hwTask').value;
@@ -301,11 +352,9 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
                 payload.message = document.getElementById('fbMessage').value;
             }
 
-            // Простая валидация
-            for (let val of Object.values(payload)) {
-                if (!val) valid = false;
-            }
-
+            // Валидация
+            let valid = true;
+            Object.values(payload).forEach(v => { if(!v) valid = false; });
             if(!valid) { alert('Заполните все поля!'); return; }
 
             await fetch(`${API_URL}${apiEndpoint}`, {
@@ -316,59 +365,35 @@ function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
 
             // Очистка полей
             fieldIds.forEach(id => { 
-                const el = document.getElementById(id); // ID в HTML (напр. hwSubject)
-                // Для простоты я передал ID полей, так что очищаем их:
-                // Но тут нюанс: в initGenericList 3-м аргументом я передал ID из HTML. 
-                // А в коде выше использовал их для маппинга. 
-                // Короче, тут массив ID элементов, просто очищаем их.
-                if(key==='homework') { document.getElementById('hwSubject').value=''; document.getElementById('hwTask').value=''; document.getElementById('hwDeadline').value=''; }
-                if(key==='news') { document.getElementById('newsTitle').value=''; document.getElementById('newsContent').value=''; }
-                if(key==='events') { document.getElementById('eventTitle').value=''; document.getElementById('eventDate').value=''; document.getElementById('eventLocation').value=''; }
-                if(key==='feedback') { document.getElementById('fbSubject').value=''; document.getElementById('fbMessage').value=''; }
+                const el = document.getElementById(id); 
+                if(el) el.value = '';
+                // Специфичный сброс для select
+                if(el.tagName === 'SELECT') el.selectedIndex = 0;
             });
-
             loadItems();
         });
     }
-
-    loadItems(); // Первая загрузка
+    loadItems();
 }
 
-// === ФУНКЦИИ ОТРИСОВКИ (HTML ШАБЛОНЫ) ===
+// Шаблоны карточек
 function renderHomeworkItem(i) {
-    const date = i.deadline ? new Date(i.deadline).toLocaleDateString() : 'Бессрочно';
-    return `<div class="item-card">
-        <span class="item-title">${i.subject}</span>
-        <div class="item-desc">${i.task}</div>
-        <div class="item-meta">Срок: ${date}</div>
-    </div>`;
+    const date = i.deadline ? new Date(i.deadline).toLocaleDateString() : '—';
+    return `<div class="item-card"><span class="item-title">${i.subject}</span><div class="item-desc">${i.task}</div><div class="item-meta">Срок: ${date}</div></div>`;
 }
-
 function renderNewsItem(i) {
-    return `<div class="item-card">
-        <span class="item-title">${i.title}</span>
-        <div class="item-desc">${i.content}</div>
-    </div>`;
+    return `<div class="item-card"><span class="item-title">${i.title}</span><div class="item-desc">${i.content}</div></div>`;
 }
-
 function renderEventItem(i) {
-    const date = new Date(i.event_date).toLocaleString([], {year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
-    return `<div class="item-card">
-        <span class="item-title">${i.title}</span>
-        <div class="item-desc">${i.location}</div>
-        <div class="item-meta">${date}</div>
-    </div>`;
+    const date = new Date(i.event_date).toLocaleString([], {month: 'long', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+    return `<div class="item-card"><span class="item-title">${i.title}</span><div class="item-desc">${i.location}</div><div class="item-meta">${date}</div></div>`;
 }
-
 function renderFeedbackItem(i) {
-    return `<div class="item-card">
-        <span class="item-title" style="color:var(--primary)">[${i.category}] ${i.subject}</span>
-        <div class="item-desc">${i.message}</div>
-    </div>`;
+    return `<div class="item-card"><span class="item-title" style="color:var(--primary)">[${i.category}] ${i.subject}</span><div class="item-desc">${i.message}</div></div>`;
 }
 
 // ==========================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (Часы, Календарь...)
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 // ==========================================
 function renderSchedule() {
     const now = new Date();
@@ -399,7 +424,6 @@ function initCalendar() {
     const prev = document.getElementById('prevMonth');
     const next = document.getElementById('nextMonth');
     
-    // Очистка старых листенеров
     const newPrev = prev.cloneNode(true); prev.parentNode.replaceChild(newPrev, prev);
     const newNext = next.cloneNode(true); next.parentNode.replaceChild(newNext, next);
     
@@ -410,8 +434,12 @@ function initCalendar() {
 
 function renderCalendar() {
     const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-    document.getElementById('currentMonth').textContent = `${months[currMonth]} ${currYear}`;
+    const mEl = document.getElementById('currentMonth');
+    if(mEl) mEl.textContent = `${months[currMonth]} ${currYear}`;
+    
     const daysContainer = document.getElementById('calendarDays');
+    if(!daysContainer) return;
+
     const firstDay = new Date(currYear, currMonth, 1).getDay(); 
     const startDayIndex = firstDay === 0 ? 6 : firstDay - 1; 
     const lastDate = new Date(currYear, currMonth + 1, 0).getDate();
@@ -438,7 +466,8 @@ function initTabs() {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             const target = btn.getAttribute('data-tab');
-            document.getElementById(target).classList.add('active');
+            const el = document.getElementById(target);
+            if(el) el.classList.add('active');
         });
     });
 }
