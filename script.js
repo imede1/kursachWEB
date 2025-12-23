@@ -1,12 +1,12 @@
 // ==========================================
 // КОНФИГУРАЦИЯ
 // ==========================================
-// Адрес вашего запущенного Node.js сервера
-const API_URL = 'https://kursachweb-backend.onrender.com'; 
+// ВСТАВЬ СЮДА СВОЮ ССЫЛКУ С RENDER (без слеша в конце)
+const API_URL = 'https://tvoy-backend-app.onrender.com'; 
 
 const scheduleStartDate = new Date('2025-09-01T00:00:00'); 
 
-// Данные расписания (остаются на клиенте)
+// Данные расписания (остаются на клиенте, так как они статичные)
 const scheduleData = {
     numerator: {
         'Понедельник': [ { t:'08:30', n:'Мат. Анализ (Лек)', r:'305' }, { t:'10:15', n:'Программирование', r:'201' } ],
@@ -29,6 +29,7 @@ let isLoginMode = true;
 let currDate = new Date();
 let currMonth = currDate.getMonth();
 let currYear = currDate.getFullYear();
+let chatInterval = null;
 
 // ==========================================
 // ИНИЦИАЛИЗАЦИЯ
@@ -36,6 +37,7 @@ let currYear = currDate.getFullYear();
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     
+    // Проверка сохраненной сессии
     const saved = localStorage.getItem('currentUser');
     if(saved) {
         currentUser = JSON.parse(saved);
@@ -51,20 +53,21 @@ function initApp() {
     initTabs();
     initCalendar();
     
-    // Остальные модули пока работают локально, чтобы не усложнять код
+    // Инициализация функций с БД
     initTasks();
     initChat();
-    loadGenericList('homework', 'addHomeworkBtn', ['hwSubject', 'hwTask', 'hwDeadline']);
-    loadGenericList('news', 'addNewsBtn', ['newsTitle', 'newsContent']);
-    loadGenericList('events', 'addEventBtn', ['eventTitle', 'eventDate', 'eventLocation']);
-    loadGenericList('feedback', 'sendFeedbackBtn', ['fbCategory', 'fbSubject', 'fbMessage']);
+    
+    // Загрузка списков с сервера
+    initGenericList('homework', '/api/homework', ['subject', 'task', 'deadline'], renderHomeworkItem);
+    initGenericList('news', '/api/news', ['title', 'content'], renderNewsItem);
+    initGenericList('events', '/api/events', ['title', 'event_date', 'location'], renderEventItem);
+    initGenericList('feedback', '/api/feedback', ['category', 'subject', 'message'], renderFeedbackItem);
 }
 
 // ==========================================
-// АВТОРИЗАЦИЯ (ЧЕРЕЗ СЕРВЕР)
+// АВТОРИЗАЦИЯ
 // ==========================================
 function initAuth() {
-    // Переключатель Вход / Регистрация
     document.getElementById('authSwitchLink').addEventListener('click', (e) => {
         e.preventDefault();
         isLoginMode = !isLoginMode;
@@ -73,58 +76,43 @@ function initAuth() {
         document.getElementById('registerFields').style.display = isLoginMode ? 'none' : 'block';
     });
 
-    // Отправка формы на сервер
     document.getElementById('authForm').addEventListener('submit', async (e) => {
         e.preventDefault();
-        
         const username = document.getElementById('authUsername').value;
         const password = document.getElementById('authPassword').value;
         const fullName = document.getElementById('authFullName').value;
 
-        // Определяем URL (Вход или Регистрация)
         const endpoint = isLoginMode ? '/login' : '/register';
-        const bodyData = isLoginMode 
-            ? { username, password }
-            : { username, password, fullName };
+        const body = isLoginMode ? { username, password } : { username, password, fullName };
 
         try {
-            const response = await fetch(`${API_URL}${endpoint}`, {
+            const res = await fetch(`${API_URL}${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(bodyData)
+                body: JSON.stringify(body)
             });
+            const data = await res.json();
 
-            const data = await response.json();
-
-            if (response.ok) {
-                if (isLoginMode) {
-                    // Успешный вход
-                    login(data);
-                } else {
-                    // Успешная регистрация
-                    alert('Регистрация прошла успешно! Теперь войдите.');
-                    // Переключаем форму на вход
-                    isLoginMode = true;
-                    document.getElementById('authSubmit').textContent = 'Войти';
-                    document.getElementById('registerFields').style.display = 'none';
-                    document.getElementById('authSwitchText').textContent = 'Нет аккаунта?';
+            if (res.ok) {
+                if (isLoginMode) login(data);
+                else {
+                    alert('Регистрация успешна! Войдите.');
+                    location.reload();
                 }
             } else {
-                // Ошибка от сервера (например, "Неверный пароль")
-                alert(data.message || 'Ошибка выполнения запроса');
+                alert(data.message || 'Ошибка');
             }
         } catch (err) {
-            console.error('Network error:', err);
-            alert('Ошибка подключения к серверу. Убедитесь, что сервер (node server.js) запущен.');
+            console.error(err);
+            alert('Ошибка сервера. Проверьте подключение.');
         }
     });
 
-    // Гостевой вход (без сервера)
     document.getElementById('guestLoginBtn').addEventListener('click', () => {
-        login({ id: 0, username: 'guest', fullName: 'Гость', isGuest: true });
+        // Для гостя используем ID 0, но задачи сохраняться не будут в общей базе корректно
+        login({ id: 0, username: 'guest', fullName: 'Гость' });
     });
 
-    // Выход
     document.getElementById('logoutBtn').addEventListener('click', () => {
         localStorage.removeItem('currentUser');
         location.reload();
@@ -141,51 +129,53 @@ function login(user) {
 function showDashboard() {
     document.getElementById('authModal').style.display = 'none';
     document.getElementById('mainContent').style.display = 'flex';
-    
     if(currentUser) {
         document.getElementById('userNameDisplay').textContent = currentUser.fullName;
         document.getElementById('userAvatar').textContent = currentUser.username[0].toUpperCase();
     }
-    renderContactsMock();
 }
 
 // ==========================================
-// ОСТАЛЬНОЙ ФУНКЦИОНАЛ (Local Storage)
+// ЗАДАЧИ (БД)
 // ==========================================
-// (Оставляем локальным, чтобы код не был слишком огромным, 
-// но вы можете переписать это на сервер по аналогии с auth)
+async function initTasks() {
+    loadTasks(); // Загрузить при старте
 
-function initTasks() {
-    renderTasks();
     const addBtn = document.getElementById('addTaskBtn');
+    // Удаляем старые слушатели через клон
     const newBtn = addBtn.cloneNode(true);
     addBtn.parentNode.replaceChild(newBtn, addBtn);
 
-    newBtn.addEventListener('click', () => {
+    newBtn.addEventListener('click', async () => {
         const input = document.getElementById('newTaskInput');
-        const val = input.value.trim();
-        if(!val) return;
-        const key = `tasks_${currentUser.username}`;
-        const tasks = JSON.parse(localStorage.getItem(key) || '[]');
-        tasks.push({ id: Date.now(), text: val, done: false });
-        localStorage.setItem(key, JSON.stringify(tasks));
+        const text = input.value.trim();
+        if(!text) return;
+
+        // Отправка на сервер
+        await fetch(`${API_URL}/api/tasks`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ userId: currentUser.id, text })
+        });
+        
         input.value = '';
-        renderTasks();
+        loadTasks();
     });
 }
 
-function renderTasks() {
-    if(!currentUser) return;
-    const key = `tasks_${currentUser.username}`;
-    const tasks = JSON.parse(localStorage.getItem(key) || '[]');
-    const container = document.getElementById('tasksList');
+async function loadTasks() {
+    if(!currentUser || !currentUser.id) return;
+    const res = await fetch(`${API_URL}/api/tasks?userId=${currentUser.id}`);
+    const tasks = await res.json();
     
+    const container = document.getElementById('tasksList');
     if(tasks.length === 0) {
         container.innerHTML = '<div style="color:#aaa; text-align:center; padding:10px;">Нет задач</div>';
         return;
     }
+    
     container.innerHTML = tasks.map((t) => `
-        <div class="task-row ${t.done ? 'done' : ''}">
+        <div class="task-row ${t.is_done ? 'done' : ''}">
             <div class="check-circle" onclick="toggleTask(${t.id})">✓</div>
             <span class="task-text">${t.text}</span>
             <div class="delete-task" onclick="deleteTask(${t.id})">✕</div>
@@ -193,89 +183,193 @@ function renderTasks() {
     `).join('');
 }
 
-window.toggleTask = function(id) {
-    const key = `tasks_${currentUser.username}`;
-    const tasks = JSON.parse(localStorage.getItem(key) || '[]');
-    const task = tasks.find(t => t.id === id);
-    if(task) { task.done = !task.done; localStorage.setItem(key, JSON.stringify(tasks)); renderTasks(); }
+window.toggleTask = async function(id) {
+    await fetch(`${API_URL}/api/tasks/${id}`, { method: 'PUT' });
+    loadTasks();
 };
 
-window.deleteTask = function(id) {
-    const key = `tasks_${currentUser.username}`;
-    let tasks = JSON.parse(localStorage.getItem(key) || '[]');
-    tasks = tasks.filter(t => t.id !== id);
-    localStorage.setItem(key, JSON.stringify(tasks));
-    renderTasks();
+window.deleteTask = async function(id) {
+    await fetch(`${API_URL}/api/tasks/${id}`, { method: 'DELETE' });
+    loadTasks();
 };
 
+// ==========================================
+// ЧАТ (БД)
+// ==========================================
 function initChat() {
     const btn = document.getElementById('sendChatBtn');
     const newBtn = btn.cloneNode(true);
     btn.parentNode.replaceChild(newBtn, btn);
-    newBtn.addEventListener('click', sendMsg);
-    renderChat();
+
+    newBtn.addEventListener('click', sendMessage);
+    
+    // Загружать сообщения каждые 3 секунды
+    loadChat();
+    if(chatInterval) clearInterval(chatInterval);
+    chatInterval = setInterval(loadChat, 3000);
 }
 
-function sendMsg() {
+async function sendMessage() {
     const input = document.getElementById('chatInput');
-    const txt = input.value;
-    if(!txt) return;
-    const msgs = JSON.parse(localStorage.getItem('chat') || '[]');
-    msgs.push({ u: currentUser.fullName, t: txt, time: new Date().toLocaleTimeString().slice(0,5) });
-    localStorage.setItem('chat', JSON.stringify(msgs));
+    const message = input.value.trim();
+    if(!message) return;
+
+    await fetch(`${API_URL}/api/chat`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ username: currentUser.fullName, message })
+    });
+
     input.value = '';
-    renderChat();
+    loadChat();
 }
 
-function renderChat() {
-    const msgs = JSON.parse(localStorage.getItem('chat') || '[]');
+async function loadChat() {
+    const res = await fetch(`${API_URL}/api/chat`);
+    const msgs = await res.json();
+    
     const box = document.getElementById('chatMessages');
-    box.innerHTML = msgs.map(m => `
-        <div class="chat-bubble ${m.u === currentUser.fullName ? 'me' : ''}">
-            <div class="chat-meta"><b>${m.u}</b> ${m.time}</div>
-            <div class="chat-text">${m.t}</div>
+    const wasScrolled = box.scrollTop + box.clientHeight >= box.scrollHeight - 20;
+
+    box.innerHTML = msgs.map(m => {
+        // Форматирование времени из TIMESTAMP
+        const date = new Date(m.created_at);
+        const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        return `
+        <div class="chat-bubble ${m.username === currentUser.fullName ? 'me' : ''}">
+            <div class="chat-meta"><b>${m.username}</b> ${timeStr}</div>
+            <div class="chat-text">${m.message}</div>
         </div>
-    `).join('');
-    box.scrollTop = box.scrollHeight;
+    `}).join('');
+
+    if(wasScrolled) box.scrollTop = box.scrollHeight;
 }
 
-function loadGenericList(key, btnId, fieldIds) {
-    const render = () => {
-        const data = JSON.parse(localStorage.getItem(key) || '[]');
-        const container = document.getElementById(key + 'List');
-        if(!container) return;
-        
-        container.innerHTML = data.length ? data.reverse().map(i => {
-            if(key === 'homework') return `<div class="item-card"><span class="item-title">${i.hwSubject}</span><div class="item-desc">${i.hwTask}</div><div class="item-meta">Срок: ${i.hwDeadline}</div></div>`;
-            if(key === 'news') return `<div class="item-card"><span class="item-title">${i.newsTitle}</span><div class="item-desc">${i.newsContent}</div></div>`;
-            if(key === 'events') return `<div class="item-card"><span class="item-title">${i.eventTitle}</span><div class="item-desc">${i.eventLocation}</div><div class="item-meta">${i.eventDate.replace('T', ' ')}</div></div>`;
-            if(key === 'feedback') return `<div class="item-card"><span class="item-title" style="color:var(--primary)">[${i.fbCategory}] ${i.fbSubject}</span><div class="item-desc">${i.fbMessage}</div></div>`;
-            return '';
-        }).join('') : '<div style="color:#aaa; text-align:center; padding:20px;">Нет записей</div>';
+// ==========================================
+// УНИВЕРСАЛЬНЫЙ ЗАГРУЗЧИК (Домашка, Новости...)
+// ==========================================
+function initGenericList(key, apiEndpoint, fieldIds, renderFunc) {
+    const btnId = `add${key.charAt(0).toUpperCase() + key.slice(1)}Btn`; // например addHomeworkBtn
+    const listId = `${key}List`;
+    
+    // Функция загрузки
+    const loadItems = async () => {
+        try {
+            const res = await fetch(`${API_URL}${apiEndpoint}`);
+            const data = await res.json();
+            const container = document.getElementById(listId);
+            if(!container) return;
+            
+            if(data.length === 0) {
+                container.innerHTML = '<div style="color:#aaa; text-align:center; padding:20px;">Нет записей</div>';
+            } else {
+                container.innerHTML = data.map(item => renderFunc(item)).join('');
+            }
+        } catch(e) { console.error(e); }
     };
 
+    // Функция добавления
     const btn = document.getElementById(btnId);
     if(btn) {
         const newBtn = btn.cloneNode(true);
-        btn.parentNode.replaceChild(newBtn, btn);
-        newBtn.addEventListener('click', () => {
-            const obj = {};
+        btn.parentNode.replaceChild(newBtn, btn); // очистка старых событий
+        
+        newBtn.addEventListener('click', async () => {
+            const payload = {};
             let valid = true;
-            fieldIds.forEach(id => {
-                const el = document.getElementById(id);
-                if(el) { const val = el.value; if(!val) valid = false; obj[id] = val; }
-            });
+            
+            // Собираем данные из полей ввода (HTML ID должны совпадать с названиями полей в объекте payload, но тут мы мапим)
+            // fieldIds - это ID инпутов в HTML: ['hwSubject', 'hwTask']
+            // А на сервер нужно слать JSON ключи, соответствующие БД. 
+            // Для упрощения, в server.js поля совпадают или мы их сопоставим тут вручную.
+            
+            // Маппинг для конкретных форм:
+            if(key === 'homework') {
+                payload.subject = document.getElementById('hwSubject').value;
+                payload.task = document.getElementById('hwTask').value;
+                payload.deadline = document.getElementById('hwDeadline').value;
+            } else if (key === 'news') {
+                payload.title = document.getElementById('newsTitle').value;
+                payload.content = document.getElementById('newsContent').value;
+            } else if (key === 'events') {
+                payload.title = document.getElementById('eventTitle').value;
+                payload.event_date = document.getElementById('eventDate').value;
+                payload.location = document.getElementById('eventLocation').value;
+            } else if (key === 'feedback') {
+                payload.category = document.getElementById('fbCategory').value;
+                payload.subject = document.getElementById('fbSubject').value;
+                payload.message = document.getElementById('fbMessage').value;
+            }
+
+            // Простая валидация
+            for (let val of Object.values(payload)) {
+                if (!val) valid = false;
+            }
+
             if(!valid) { alert('Заполните все поля!'); return; }
-            const data = JSON.parse(localStorage.getItem(key) || '[]');
-            data.push(obj);
-            localStorage.setItem(key, JSON.stringify(data));
-            fieldIds.forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-            render();
+
+            await fetch(`${API_URL}${apiEndpoint}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+
+            // Очистка полей
+            fieldIds.forEach(id => { 
+                const el = document.getElementById(id); // ID в HTML (напр. hwSubject)
+                // Для простоты я передал ID полей, так что очищаем их:
+                // Но тут нюанс: в initGenericList 3-м аргументом я передал ID из HTML. 
+                // А в коде выше использовал их для маппинга. 
+                // Короче, тут массив ID элементов, просто очищаем их.
+                if(key==='homework') { document.getElementById('hwSubject').value=''; document.getElementById('hwTask').value=''; document.getElementById('hwDeadline').value=''; }
+                if(key==='news') { document.getElementById('newsTitle').value=''; document.getElementById('newsContent').value=''; }
+                if(key==='events') { document.getElementById('eventTitle').value=''; document.getElementById('eventDate').value=''; document.getElementById('eventLocation').value=''; }
+                if(key==='feedback') { document.getElementById('fbSubject').value=''; document.getElementById('fbMessage').value=''; }
+            });
+
+            loadItems();
         });
     }
-    render();
+
+    loadItems(); // Первая загрузка
 }
 
+// === ФУНКЦИИ ОТРИСОВКИ (HTML ШАБЛОНЫ) ===
+function renderHomeworkItem(i) {
+    const date = i.deadline ? new Date(i.deadline).toLocaleDateString() : 'Бессрочно';
+    return `<div class="item-card">
+        <span class="item-title">${i.subject}</span>
+        <div class="item-desc">${i.task}</div>
+        <div class="item-meta">Срок: ${date}</div>
+    </div>`;
+}
+
+function renderNewsItem(i) {
+    return `<div class="item-card">
+        <span class="item-title">${i.title}</span>
+        <div class="item-desc">${i.content}</div>
+    </div>`;
+}
+
+function renderEventItem(i) {
+    const date = new Date(i.event_date).toLocaleString([], {year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+    return `<div class="item-card">
+        <span class="item-title">${i.title}</span>
+        <div class="item-desc">${i.location}</div>
+        <div class="item-meta">${date}</div>
+    </div>`;
+}
+
+function renderFeedbackItem(i) {
+    return `<div class="item-card">
+        <span class="item-title" style="color:var(--primary)">[${i.category}] ${i.subject}</span>
+        <div class="item-desc">${i.message}</div>
+    </div>`;
+}
+
+// ==========================================
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ (Часы, Календарь...)
+// ==========================================
 function renderSchedule() {
     const now = new Date();
     const start = new Date(scheduleStartDate).setHours(0,0,0,0);
@@ -289,10 +383,8 @@ function renderSchedule() {
     
     const container = document.getElementById('scheduleContainer');
     if(!container) return;
-    
     container.innerHTML = '';
     const week = scheduleData[type];
-    
     for(const [day, lessons] of Object.entries(week)) {
         let html = `<div class="day-block"><div class="day-name">${day}</div>`;
         lessons.forEach(l => {
@@ -306,26 +398,20 @@ function renderSchedule() {
 function initCalendar() {
     const prev = document.getElementById('prevMonth');
     const next = document.getElementById('nextMonth');
-    if(prev) {
-        const newPrev = prev.cloneNode(true);
-        prev.parentNode.replaceChild(newPrev, prev);
-        newPrev.addEventListener('click', () => { currMonth--; if(currMonth < 0) { currMonth = 11; currYear--; } renderCalendar(); });
-    }
-    if(next) {
-        const newNext = next.cloneNode(true);
-        next.parentNode.replaceChild(newNext, next);
-        newNext.addEventListener('click', () => { currMonth++; if(currMonth > 11) { currMonth = 0; currYear++; } renderCalendar(); });
-    }
+    
+    // Очистка старых листенеров
+    const newPrev = prev.cloneNode(true); prev.parentNode.replaceChild(newPrev, prev);
+    const newNext = next.cloneNode(true); next.parentNode.replaceChild(newNext, next);
+    
+    newPrev.addEventListener('click', () => { currMonth--; if(currMonth < 0) { currMonth = 11; currYear--; } renderCalendar(); });
+    newNext.addEventListener('click', () => { currMonth++; if(currMonth > 11) { currMonth = 0; currYear++; } renderCalendar(); });
     renderCalendar();
 }
 
 function renderCalendar() {
     const months = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
-    const monthEl = document.getElementById('currentMonth');
-    if(monthEl) monthEl.textContent = `${months[currMonth]} ${currYear}`;
+    document.getElementById('currentMonth').textContent = `${months[currMonth]} ${currYear}`;
     const daysContainer = document.getElementById('calendarDays');
-    if(!daysContainer) return;
-
     const firstDay = new Date(currYear, currMonth, 1).getDay(); 
     const startDayIndex = firstDay === 0 ? 6 : firstDay - 1; 
     const lastDate = new Date(currYear, currMonth + 1, 0).getDate();
@@ -352,25 +438,7 @@ function initTabs() {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             btn.classList.add('active');
             const target = btn.getAttribute('data-tab');
-            const el = document.getElementById(target);
-            if(el) el.classList.add('active');
+            document.getElementById(target).classList.add('active');
         });
     });
-}
-
-function renderContactsMock() {
-    const contactsContainer = document.getElementById('contactsList');
-    if(contactsContainer && currentUser) {
-        const mockContacts = [
-            {name: 'Администратор', role: 'Система'},
-            {name: currentUser.fullName, role: 'Вы'},
-            {name: 'Александр Тагайназаров', role: 'Староста'},
-        ];
-        contactsContainer.innerHTML = mockContacts.map(c => `
-            <div class="contact-card">
-                <div class="avatar-circle">${c.name[0]}</div>
-                <div class="u-info"><div class="name">${c.name}</div><div class="role">${c.role}</div></div>
-            </div>
-        `).join('');
-    }
 }
