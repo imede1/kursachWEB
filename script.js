@@ -2,7 +2,7 @@
 // КОНФИГУРАЦИЯ
 // ==========================================
 // ВСТАВЬ СЮДА СВОЮ ССЫЛКУ С RENDER (без слеша в конце)
-const API_URL = 'https://tvoy-backend-app.onrender.com'; 
+const API_URL = 'https://kursachweb-backend.onrender.com'; 
 
 const scheduleStartDate = new Date('2025-09-01T00:00:00'); 
 
